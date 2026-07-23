@@ -1,1 +1,188 @@
-# Rental-Voice-bot
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DriveEasy Rentals - Voice AI Support</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --accent: #10b981;
+      --danger: #ef4444;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
+    
+    .card { background: var(--card-bg); width: 100%; max-width: 440px; border-radius: 20px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); overflow: hidden; display: flex; flex-direction: column; }
+    .header { background: var(--primary); color: white; padding: 1.5rem; text-align: center; position: relative; }
+    .header h1 { font-size: 1.25rem; font-weight: 600; margin-bottom: 0.25rem; }
+    .header p { font-size: 0.85rem; opacity: 0.9; }
+
+    .chat-container { padding: 1.25rem; height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; background: #fafafa; }
+    .msg { max-width: 80%; padding: 0.75rem 1rem; border-radius: 12px; font-size: 0.9rem; line-height: 1.4; }
+    .msg.bot { background: #e2e8f0; color: var(--text); align-self: flex-start; border-bottom-left-radius: 2px; }
+    .msg.user { background: var(--primary); color: white; align-self: flex-end; border-bottom-right-radius: 2px; }
+
+    .controls { padding: 1.25rem; border-top: 1px solid #f1f5f9; display: flex; flex-direction: column; align-items: center; gap: 0.75rem; }
+    .status { font-size: 0.85rem; color: var(--text-muted); font-weight: 500; min-height: 1.2rem; text-align: center; }
+
+    .voice-btn { width: 72px; height: 72px; border-radius: 50%; border: none; background: var(--primary); color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); }
+    .voice-btn:hover { background: var(--primary-dark); transform: scale(1.05); }
+    .voice-btn.listening { background: var(--danger); animation: pulse 1.5s infinite; }
+
+    .wave { width: 24px; height: 24px; fill: currentColor; }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+      70% { box-shadow: 0 0 0 16px rgba(239, 68, 68, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+
+    .quick-prompts { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; padding: 0 1rem 1rem; }
+    .prompt-chip { background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 16px; padding: 0.35rem 0.75rem; font-size: 0.75rem; color: var(--text-muted); cursor: pointer; transition: all 0.2s; }
+    .prompt-chip:hover { background: var(--primary); color: white; border-color: var(--primary); }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <div class="header">
+    <h1>DriveEasy Rental Assistant</h1>
+    <p>Tap the mic and speak your query</p>
+  </div>
+
+  <div class="chat-container" id="chat">
+    <div class="msg bot">Hello! Welcome to DriveEasy Rentals. How can I help you today? (e.g., pricing, extension, or deposit queries)</div>
+  </div>
+
+  <div class="quick-prompts">
+    <button class="prompt-chip" onclick="simulatePrompt('What are your rental rates?')">Rates</button>
+    <button class="prompt-chip" onclick="simulatePrompt('How do I extend my rental?')">Extend Rental</button>
+    <button class="prompt-chip" onclick="simulatePrompt('What is the deposit policy?')">Security Deposit</button>
+    <button class="prompt-chip" onclick="simulatePrompt('I had an accident')">Emergency Help</button>
+  </div>
+
+  <div class="controls">
+    <div class="status" id="status">Click microphone to start talking</div>
+    <button class="voice-btn" id="micBtn">
+      <svg class="wave" viewBox="0 0 24 24">
+        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<script>
+  const chat = document.getElementById('chat');
+  const status = document.getElementById('status');
+  const micBtn = document.getElementById('micBtn');
+
+  // Check Web Speech API Support
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognition;
+
+  if (SpeechRecognition) {
+    recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.lang = 'en-US';
+
+    recognition.onstart = () => {
+      micBtn.classList.add('listening');
+      status.innerText = "Listening... Speak now";
+    };
+
+    recognition.onend = () => {
+      micBtn.classList.remove('listening');
+      status.innerText = "Click microphone to start talking";
+    };
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      handleUserQuery(transcript);
+    };
+
+    recognition.onerror = (e) => {
+      micBtn.classList.remove('listening');
+      status.innerText = "Error recognizing voice. Try again.";
+    };
+  } else {
+    status.innerText = "Speech Recognition not supported in this browser.";
+    micBtn.style.opacity = 0.5;
+  }
+
+  micBtn.addEventListener('click', () => {
+    if (!SpeechRecognition) return;
+    if (micBtn.classList.contains('listening')) {
+      recognition.stop();
+    } else {
+      window.speechSynthesis.cancel(); // Stop any ongoing bot speech
+      recognition.start();
+    }
+  });
+
+  function simulatePrompt(text) {
+    window.speechSynthesis.cancel();
+    handleUserQuery(text);
+  }
+
+  function handleUserQuery(query) {
+    addMessage(query, 'user');
+    const response = getBotResponse(query);
+    setTimeout(() => {
+      addMessage(response, 'bot');
+      speakText(response);
+    }, 400);
+  }
+
+  function addMessage(text, sender) {
+    const msg = document.createElement('div');
+    msg.className = `msg ${sender}`;
+    msg.innerText = text;
+    chat.appendChild(msg);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  function speakText(text) {
+    if ('speechSynthesis' in window) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      window.speechSynthesis.speak(utterance);
+    }
+  }
+
+  // Knowledge Base Engine for Rental Support
+  function getBotResponse(input) {
+    const text = input.toLowerCase();
+
+    if (text.includes('rate') || text.includes('price') || text.includes('cost') || text.includes('how much')) {
+      return "Economy cars start at $35 per day, SUVs at $65 per day, and luxury vehicles start at $100 per day. All rentals include unlimited mileage.";
+    }
+    if (text.includes('extend') || text.includes('longer') || text.includes('keep')) {
+      return "You can extend your booking directly through our mobile app or by providing me your booking ID right now. Extensions depend on vehicle availability.";
+    }
+    if (text.includes('deposit') || text.includes('security') || text.includes('hold')) {
+      return "We require a refundable security deposit of $200 on a credit or debit card, which is released within 3 to 5 business days after returning the vehicle safely.";
+    }
+    if (text.includes('accident') || text.includes('breakdown') || text.includes('emergency') || text.includes('flat tire')) {
+      return "If you are in immediate danger, please call emergency services first. For 24/7 DriveEasy Roadside Assistance, stay on the line or call our helpline at 1-800-DRIVE-SAFE.";
+    }
+    if (text.includes('cancel') || text.includes('refund')) {
+      return "Cancellations made 24 hours prior to pickup receive a full 100% refund. Cancellations within 24 hours incur a 1-day rental fee.";
+    }
+    if (text.includes('age') || text.includes('old') || text.includes('license')) {
+      return "Drivers must be at least 21 years old with a valid driver's license held for at least 1 year. Drivers under 25 may incur a young driver fee.";
+    }
+
+    return "I'm sorry, I didn't quite catch that. You can ask me about rental rates, booking extensions, security deposits, or cancellation policies!";
+  }
+</script>
+
+</body>
+</html>
